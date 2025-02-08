@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Move File</title>
+</head>
+<body>
+  <h1>Move {{ req_path }}</h1>
+  <form action="{{ url_for('move', req_path=req_path) }}" method="post">
+    <label for="destination">Select Destination Directory:</label>
+    <select name="destination" id="destination">
+      {% for dir in all_dirs %}
+        <option value="{{ dir }}">{{ dir }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Move</button>
+  </form>
+  <a href="{{ url_for('index', req_path=req_path) }}">Back</a>
+</body>
+</html>

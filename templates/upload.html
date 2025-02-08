@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="display-4 mt-4">Upload File to {{ current_path or 'Root' }}</h2>
+<p class="lead">Zip files will be automatically extracted into a folder with the same name.</p>
+<form id="upload-form" action="{{ url_for('upload_file', req_path=current_path) }}" method="post" enctype="multipart/form-data">
+    <div class="form-group">
+        <label for="file" class="h5">Choose File:</label>
+        <input type="file" name="file" id="file" class="form-control-file">
+    </div>
+    <button type="submit" class="btn btn-primary btn-lg">
+        <i class="fas fa-upload"></i> Upload
+    </button>
+    <a href="{{ url_for('index', req_path=current_path) }}" class="btn btn-secondary btn-lg">Cancel</a>
+</form>
+
+<!-- Progress bar and stats for upload and unzipping -->
+<div id="progress-container" style="display:none; margin-top:20px;">
+    <h5 id="progress-title">Uploading...</h5>
+    <div class="progress">
+        <div id="progress-bar" class="progress-bar" role="progressbar" style="width: 0%;">0%</div>
+    </div>
+    <div id="progress-stats" style="margin-top:10px;">
+        <p>Speed: <span id="progress-speed">0</span> KB/s</p>
+        <p>Estimated Time Remaining: <span id="progress-time-remaining">Calculating...</span></p>
+    </div>
+</div>
+
+<!-- Include Socket.IO client library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.4/socket.io.min.js"></script>
+
+<script>
+let isUploading = false;
+let isUnzipping = false;
+
+// Warn the user if they try to navigate away during upload or unzipping
+window.addEventListener('beforeunload', function (e) {
+    if (isUploading || isUnzipping) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+});
+
+var socket = io.connect(location.protocol + '//' + document.domain + ':' + location.port);
+
+socket.on('connect', function() {
+    var sid = socket.id;
+
+    // Join the room with sid
+    socket.emit('join', {'sid': sid});
+
+    document.getElementById('upload-form').addEventListener('submit', function(e){
+        e.preventDefault(); // Prevent the default form submit
+
+        var fileInput = document.getElementById('file');
+        var file = fileInput.files[0];
+
+        if (!file) {
+            alert('No file selected');
+            return;
+        }
+
+        var formData = new FormData();
+        formData.append('file', file);
+        formData.append('sid', sid);  // Include sid in form data
+
+        var xhr = new XMLHttpRequest();
+
+        xhr.upload.addEventListener('progress', function(e){
+            if (e.lengthComputable) {
+                var percentComplete = (e.loaded / e.total) * 100;
+                var progressBar = document.getElementById('progress-bar');
+                progressBar.style.width = percentComplete.toFixed(2) + '%';
+                progressBar.innerHTML = percentComplete.toFixed(2) + '%';
+
+                // Calculate speed in KB/s and estimated time remaining
+                var progressSpeedElem = document.getElementById('progress-speed');
+                var progressTimeRemainingElem = document.getElementById('progress-time-remaining');
+
+                var currentTime = new Date().getTime();
+                if (!xhr.upload.startTime) {
+                    xhr.upload.startTime = currentTime;
+                    xhr.upload.lastLoaded = e.loaded;
+                }
+
+                var timeElapsed = (currentTime - xhr.upload.startTime) / 1000; // in seconds
+                var bytesUploaded = e.loaded;
+                var uploadSpeed = bytesUploaded / timeElapsed / 1024; // in KB/s
+                progressSpeedElem.innerHTML = uploadSpeed.toFixed(2);
+
+                var bytesRemaining = e.total - e.loaded;
+                var timeRemaining = bytesRemaining / (uploadSpeed * 1024); // in seconds
+                if (isFinite(timeRemaining) && timeRemaining >= 0) {
+                    var minutes = Math.floor(timeRemaining / 60);
+                    var seconds = Math.floor(timeRemaining % 60);
+                    progressTimeRemainingElem.innerHTML = minutes + 'm ' + seconds + 's';
+                } else {
+                    progressTimeRemainingElem.innerHTML = 'Calculating...';
+                }
+
+                xhr.upload.lastLoaded = bytesUploaded;
+            }
+        });
+
+        xhr.upload.addEventListener('loadstart', function(e){
+            document.getElementById('progress-container').style.display = 'block';
+            document.getElementById('progress-title').innerHTML = 'Uploading...';
+            isUploading = true;
+        });
+
+        xhr.upload.addEventListener('loadend', function(e){
+            isUploading = false;
+        });
+
+        xhr.onreadystatechange = function(){
+            if (xhr.readyState == XMLHttpRequest.DONE) {
+                if (xhr.status == 200) {
+                    // Handle success
+                    var response = xhr.responseText;
+                    if (response.includes('extraction started')) {
+                        // Start listening for unzip progress
+                        document.getElementById('progress-title').innerHTML = 'Extracting Zip File...';
+                        isUnzipping = true;
+                    } else {
+                        // Handle non-zip file upload success
+                        alert('File uploaded successfully');
+                        window.location.href = "{{ url_for('index', req_path=current_path) }}";
+                    }
+                } else {
+                    // Handle error
+                    alert('An error occurred while uploading the file');
+                }
+            }
+        };
+
+        xhr.open('POST', "{{ url_for('upload_file', req_path=current_path) }}", true);
+        xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        xhr.send(formData);
+    });
+
+    // Listen for unzip progress events
+    socket.on('unzip_progress', function(data) {
+        console.log("Unzip progress:", data.progress);
+        var progressBar = document.getElementById('progress-bar');
+        progressBar.style.width = data.progress.toFixed(2) + '%';
+        progressBar.innerHTML = data.progress.toFixed(2) + '%';
+
+        // You can update speed and time remaining if the server provides that data
+    });
+
+    // Listen for unzip completion
+    socket.on('unzip_complete', function() {
+        isUnzipping = false;
+        alert('Zip file uploaded and extracted successfully');
+        window.location.href = "{{ url_for('index', req_path=current_path) }}";
+    });
+
+    // Listen for unzip errors
+    socket.on('unzip_error', function(data) {
+        isUnzipping = false;
+        alert('An error occurred during unzipping: ' + data.error);
+    });
+});
+</script>
+{% endblock %}

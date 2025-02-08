@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>Preview: {{ filename }}</h2>
+<div class="mt-3">
+    {% if filename.lower().endswith(('.png', '.jpg', '.jpeg', '.gif')) %}
+        <img src="{{ url_for('index', req_path=filename) }}" alt="{{ filename }}" class="img-fluid">
+    {% elif filename.lower().endswith('.txt') %}
+        <pre>
+            {{ file_content }}
+        </pre>
+    {% else %}
+        <p>Preview not available for this file type.</p>
+    {% endif %}
+</div>
+{% endblock %}

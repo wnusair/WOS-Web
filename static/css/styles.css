@@ -1,0 +1,31 @@
+body {
+    padding-top: 56px; /* For fixed navbar */
+}
+
+.list-group-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.breadcrumb {
+    background-color: #e9ecef;
+}
+
+.alert {
+    margin-top: 20px;
+}
+
+form {
+    margin-top: 15px;
+}
+
+pre {
+    background-color: #f8f9fa;
+    padding: 15px;
+}
+
+img.img-fluid {
+    max-width: 100%;
+    height: auto;
+}
